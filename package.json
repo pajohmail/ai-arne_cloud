@@ -1,0 +1,30 @@
+{
+  "name": "ai-arne-cloud",
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "functions-framework --target=managerHandler --port=8080",
+    "dev": "nodemon --exec ts-node src/index.ts",
+    "test:local": "tsx src/test-local.ts"
+  },
+  "dependencies": {
+    "@google-cloud/functions-framework": "^3.4.0",
+    "axios": "^1.7.7",
+    "he": "^1.2.0",
+    "mysql2": "^3.11.0",
+    "uuid": "^9.0.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/he": "^1.2.3",
+    "nodemon": "^3.1.7",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.6.3"
+  }
+}
