@@ -1,8 +1,8 @@
-import { withConn } from '../services/db.js';
+import { withFirestore } from '../services/firestore.js';
 import { sanitizeHtml } from '../utils/text.js';
 import type { ProviderRelease } from './providers.js';
 
-export async function createOrUpdateTutorial(postId: number, release: ProviderRelease) {
+export async function createOrUpdateTutorial(postId: string, release: ProviderRelease) {
   const title = `Kom igång med ${release.name}${release.version ? ' ' + release.version : ''}`;
   const html = sanitizeHtml(
     [
@@ -19,23 +19,41 @@ export async function createOrUpdateTutorial(postId: number, release: ProviderRe
     ].join('\n')
   );
 
-  return await withConn(async (conn) => {
-    const [rows] = await conn.query('SELECT id FROM tutorials WHERE post_id = ?', [postId]);
-    if ((rows as any[]).length > 0) {
-      const id = (rows as any[])[0].id;
-      await conn.query('UPDATE tutorials SET title=?, content=?, source_url=? WHERE id=?', [
+  return await withFirestore(async (db) => {
+    const tutorialsRef = db.collection('tutorials');
+    
+    // Kolla om tutorial redan finns för denna post
+    const existingQuery = await tutorialsRef.where('postId', '==', postId).limit(1).get();
+    
+    const tutorialData = {
+      postId,
+      title,
+      content: html,
+      sourceUrl: release.url,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    if (!existingQuery.empty) {
+      // Uppdatera befintlig tutorial
+      const existingDoc = existingQuery.docs[0];
+      await existingDoc.ref.update({
         title,
-        html,
-        release.url,
-        id
-      ]);
-      return { id, updated: true };
+        content: html,
+        sourceUrl: release.url,
+        updatedAt: new Date()
+      });
+      return { 
+        id: existingDoc.id, 
+        updated: true 
+      };
     } else {
-      const [res] = await conn.query(
-        'INSERT INTO tutorials (post_id, title, content, source_url) VALUES (?, ?, ?, ?)',
-        [postId, title, html, release.url]
-      );
-      return { id: (res as any).insertId as number, updated: false };
+      // Skapa ny tutorial
+      const docRef = await tutorialsRef.add(tutorialData);
+      return { 
+        id: docRef.id, 
+        updated: false 
+      };
     }
   });
 }

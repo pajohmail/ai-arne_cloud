@@ -1,4 +1,4 @@
-import { withConn } from '../services/db.js';
+import { withFirestore, timestampToISO } from '../services/firestore.js';
 import { slugify, sanitizeHtml } from '../utils/text.js';
 import { ProviderRelease } from './providers.js';
 
@@ -13,24 +13,46 @@ export async function upsertNews(release: ProviderRelease) {
     ].join('')
   );
 
-  return await withConn(async (conn) => {
-    const [rows] = await conn.query('SELECT id FROM posts WHERE slug = ?', [slug]);
-    if ((rows as any[]).length > 0) {
-      const id = (rows as any[])[0].id;
-      await conn.query('UPDATE posts SET title=?, content=?, provider=?, source_url=? WHERE id=?', [
+  return await withFirestore(async (db) => {
+    // Kolla om posten redan finns (via slug)
+    const postsRef = db.collection('posts');
+    const existingQuery = await postsRef.where('slug', '==', slug).limit(1).get();
+    
+    const postData = {
+      slug,
+      title,
+      excerpt: release.summary.slice(0, 280),
+      content,
+      provider: release.provider,
+      sourceUrl: release.url,
+      linkedinUrn: '',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    if (!existingQuery.empty) {
+      // Uppdatera befintlig post
+      const existingDoc = existingQuery.docs[0];
+      await existingDoc.ref.update({
         title,
         content,
-        release.provider,
-        release.url,
-        id
-      ]);
-      return { id, slug, updated: true };
+        provider: release.provider,
+        sourceUrl: release.url,
+        updatedAt: new Date()
+      });
+      return { 
+        id: existingDoc.id, 
+        slug, 
+        updated: true 
+      };
     } else {
-      const [res] = await conn.query(
-        'INSERT INTO posts (slug, title, excerpt, content, provider, source_url) VALUES (?, ?, ?, ?, ?, ?)',
-        [slug, title, release.summary.slice(0, 280), content, release.provider, release.url]
-      );
-      return { id: (res as any).insertId as number, slug, updated: false };
+      // Skapa ny post
+      const docRef = await postsRef.add(postData);
+      return { 
+        id: docRef.id, 
+        slug, 
+        updated: false 
+      };
     }
   });
 }
