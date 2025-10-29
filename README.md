@@ -44,7 +44,7 @@ PUBLIC_BASE_URL=https://ai-arne.se
 LINKEDIN_ACCESS_TOKEN=...
 LINKEDIN_ORG_URN=urn:li:organization:...
 RSS_FEEDS=https://feeds.feedburner.com/oreilly/radar,https://techcrunch.com/feed/
-ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
 ```
 
 ## Autentisering
@@ -79,9 +79,11 @@ firestore = new Firestore({
 ### Externa API:er (API-nycklar och tokens)
 
 **AI Providers:**
-- **Anthropic API** - API-nyckel från miljövariabel `ANTHROPIC_API_KEY`
-  - Används för AI-baserad filtrering och sammanfattning av RSS-nyheter
-- **OpenAI** - Används inte direkt (endast publika GitHub API-anrop för releases)
+- **OpenAI Responses API** - API-nyckel från miljövariabel `OPENAI_API_KEY`
+  - Används för AI-baserad filtrering och sammanfattning av RSS-nyheter via Responses API
+  - Använder modellen `gpt-5-mini` med structured outputs (JSON schema)
+  - Stödjer svenska prompts och strukturerade responses med automatisk parsing
+- **OpenAI GitHub API** - Används för att hämta releases (publika API-anrop)
 - **Google AI/Gemini** - Används inte direkt (endast publika GitHub API-anrop för releases)
 
 **LinkedIn API:**
@@ -89,6 +91,19 @@ firestore = new Firestore({
 - Business-sidan har tillgång till LinkedIn API via OAuth
 - Access token lagras i miljövariabel `LINKEDIN_ACCESS_TOKEN`
 - Organisation URN lagras i miljövariabel `LINKEDIN_ORG_URN`
+- OAuth-klient för att hämta access token:
+  - `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, `LINKEDIN_REDIRECT_URI`
+
+```typescript
+// Byt authorization code till access token
+const token = await exchangeCodeForAccessToken({ code: 'AUTH_CODE' });
+
+// Validera token
+await validateLinkedInToken(token.access_token);
+
+// Lista organisationer där du är admin (för att få ORN)
+const orgs = await listAdminOrganizations(token.access_token);
+```
 
 **Viktigt:**
 - Dessa API:er använder **INTE** Google Cloud-autentisering
@@ -97,10 +112,36 @@ firestore = new Firestore({
 
 **Implementation:**
 ```typescript
-// Anthropic API - API-nyckel från miljövariabel
-const anthropic = new Anthropic({ 
-  apiKey: process.env.ANTHROPIC_API_KEY 
+// OpenAI Responses API - API-nyckel från miljövariabel
+const openai = new OpenAI({ 
+  apiKey: process.env.OPENAI_API_KEY 
 });
+
+// Använd Responses API med structured outputs för strukturerade responses
+const completion = await openai.beta.chat.completions.parse({
+  model: 'gpt-5-mini',
+  messages: [/* ... */],
+  response_format: {
+    type: 'json_schema',
+    json_schema: {
+      name: 'news_summary',
+      strict: true,
+      schema: {
+        type: 'object',
+        properties: {
+          skip: { type: 'boolean' },
+          title: { type: 'string' },
+          excerpt: { type: 'string' },
+          content: { type: 'string' }
+        },
+        required: ['skip', 'title', 'excerpt', 'content']
+      }
+    }
+  }
+});
+
+// Parsed response är automatiskt typad
+const parsedResponse = completion.choices[0]?.message?.parsed;
 
 // LinkedIn API - Access token från miljövariabel
 // Business-sidan har redan tillgång till LinkedIn API
@@ -198,7 +239,7 @@ gcloud functions deploy generalNewsHandler \
   --set-env-vars=PUBLIC_BASE_URL=https://ai-arne.se \
   --set-env-vars=LINKEDIN_ACCESS_TOKEN=...,LINKEDIN_ORG_URN=urn:li:organization:... \
   --set-env-vars=RSS_FEEDS=https://feeds.feedburner.com/oreilly/radar,https://techcrunch.com/feed/ \
-  --set-env-vars=ANTHROPIC_API_KEY=sk-ant-...
+  --set-env-vars=OPENAI_API_KEY=sk-...
 ```
 
 **Bakåtkompatibilitet (valfritt):**

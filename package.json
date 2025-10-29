@@ -11,16 +11,19 @@
     "start": "functions-framework --target=managerHandler --port=8080",
     "dev": "nodemon --exec ts-node src/index.ts",
     "test:local": "tsx src/test-local.ts",
-    "test:firestore": "tsx src/test-firestore.ts"
+    "test:firestore": "tsx src/test-firestore.ts",
+    "test:responses-api": "tsx src/test-responses-api.ts",
+    "test:linkedin": "tsx src/test-linkedin.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.27.0",
     "@google-cloud/firestore": "^7.11.6",
     "@google-cloud/functions-framework": "^3.4.0",
     "axios": "^1.7.7",
     "dotenv": "^17.2.3",
     "he": "^1.2.0",
+    "openai": "^4.47.0",
     "rss-parser": "^3.13.0",
+    "typescript": "^5.6.3",
     "uuid": "^9.0.1",
     "zod": "^3.23.8"
   },

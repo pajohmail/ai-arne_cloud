@@ -10,8 +10,11 @@ test-results.txt
 firestore-test-results.txt
 
 # Google Cloud credentials
-*.json
 service-account-*.json
+# Exclude JSON config files but keep rss-feeds.json
+budget*.json
+# Keep rss-feeds.json (needed for RSS feed configuration)
+!rss-feeds.json
 
 # Logs
 *.log

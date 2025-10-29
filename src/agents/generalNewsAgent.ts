@@ -1,5 +1,5 @@
 import Parser from 'rss-parser';
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { sanitizeHtml } from '../utils/text.js';
 import { upsertGeneralNews } from '../services/upsert.js';
 
@@ -20,6 +20,13 @@ export interface ProcessedNewsItem {
   excerpt: string;
   sourceUrl: string;
   source: string;
+}
+
+interface NewsSummaryResponse {
+  skip: boolean;
+  title: string;
+  excerpt: string;
+  content: string;
 }
 
 // Nyckelord att exkludera (bildgenerering, video, etc.)
@@ -90,21 +97,47 @@ export function filterForDevelopmentFocus(item: RSSFeedItem): boolean {
 }
 
 /**
- * Använder LLM för att sammanfatta och verifiera utvecklingsfokus
+ * Använder OpenAI Responses API med structured outputs för att sammanfatta och verifiera utvecklingsfokus
  */
 export async function summarizeWithAI(item: RSSFeedItem, source: string): Promise<ProcessedNewsItem | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    throw new Error('ANTHROPIC_API_KEY environment variable is required');
+    throw new Error('OPENAI_API_KEY environment variable is required');
   }
 
-  const anthropic = new Anthropic({ apiKey });
+  const openai = new OpenAI({ apiKey });
 
   const content = item.contentSnippet || item.content || '';
-  const prompt = `Du är en AI-nyhetsredigerare som fokuserar på AI-utveckling och programmering. 
-Kontrollera följande nyhet och skapa en kort sammanfattning på svenska (max 300 ord) som fokuserar på utvecklingsaspekter.
+  
+  // JSON schema för structured output
+  const responseSchema = {
+    type: 'object',
+    properties: {
+      skip: {
+        type: 'boolean',
+        description: 'true om nyheten ska hoppas över (bildgenerering, videogenerering, etc.)'
+      },
+      title: {
+        type: 'string',
+        description: 'Artikelns titel på svenska'
+      },
+      excerpt: {
+        type: 'string',
+        description: 'Kort sammanfattning på svenska (2-3 meningar, max 200 ord)'
+      },
+      content: {
+        type: 'string',
+        description: 'Huvudinnehåll på svenska (3-5 meningar, max 300 ord)'
+      }
+    },
+    required: ['skip', 'title', 'excerpt', 'content'],
+    additionalProperties: false
+  };
 
-Om nyheten handlar om bildgenerering, videogenerering, eller visuella AI-tjänster som inte är relevanta för utveckling, returnera enbart "SKIP".
+  const prompt = `Du är en AI-nyhetsredigerare som fokuserar på AI-utveckling och programmering. 
+Kontrollera följande nyhet och skapa en kort sammanfattning på svenska som fokuserar på utvecklingsaspekter.
+
+Om nyheten handlar om bildgenerering, videogenerering, eller visuella AI-tjänster som inte är relevanta för utveckling, sätt "skip" till true.
 
 Nyhetstitel: ${item.title}
 Innehåll: ${content.substring(0, 2000)}
@@ -112,44 +145,48 @@ Innehåll: ${content.substring(0, 2000)}
 Skapa en kort artikel på svenska med:
 - Titel (behåll originaltiteln om den är relevant)
 - En kort sammanfattning (2-3 meningar, max 200 ord)
-- Huvudinnehåll (3-5 meningar, max 300 ord)
-
-Format:
-TITEL: [titel]
-SAMMANFATTNING: [kort sammanfattning]
-INNEHÅLL: [huvudinnehåll]`;
+- Huvudinnehåll (3-5 meningar, max 300 ord)`;
 
   try {
-    const message = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 1000,
-      messages: [{
-        role: 'user',
-        content: prompt
-      }]
+    const completion = await openai.beta.chat.completions.parse({
+      model: 'gpt-5-mini',
+      messages: [
+        {
+          role: 'system',
+          content: 'Du är en AI-nyhetsredigerare som fokuserar på AI-utveckling och programmering. Svara alltid på svenska med strukturerad JSON.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      max_completion_tokens: 1000,
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'news_summary',
+          strict: true,
+          schema: responseSchema as any
+        }
+      }
     });
 
-    const responseText = message.content[0].type === 'text' ? message.content[0].text : '';
+    const parsedResponse = completion.choices[0]?.message?.parsed as NewsSummaryResponse | null;
     
-    // Om LLM säger SKIP, hoppa över denna nyhet
-    if (responseText.includes('SKIP') || responseText.trim().length === 0) {
+    // Om LLM säger att vi ska hoppa över nyheten
+    if (!parsedResponse || parsedResponse.skip === true) {
       return null;
     }
 
-    // Parsa LLM-svaret
-    const titleMatch = responseText.match(/TITEL:\s*(.+?)(?:\n|$)/i);
-    const excerptMatch = responseText.match(/SAMMANFATTNING:\s*(.+?)(?:\n|$)/is);
-    const contentMatch = responseText.match(/INNEHÅLL:\s*(.+?)(?:\n|$)/is);
-
-    const title = titleMatch ? titleMatch[1].trim() : item.title;
-    const excerpt = excerptMatch ? excerptMatch[1].trim().slice(0, 280) : (item.contentSnippet || '').slice(0, 280);
-    const content = contentMatch ? contentMatch[1].trim() : (item.contentSnippet || '').slice(0, 500);
+    const title = parsedResponse.title?.trim() || item.title;
+    const excerpt = parsedResponse.excerpt?.trim().slice(0, 280) || (item.contentSnippet || '').slice(0, 280);
+    const contentText = parsedResponse.content?.trim().slice(0, 500) || (item.contentSnippet || '').slice(0, 500);
 
     // Skapa HTML-innehåll (sanitize textdelar men behåll HTML-struktur)
     const htmlContent = [
       `<p><strong>${sanitizeHtml(title)}</strong></p>`,
       `<p>${sanitizeHtml(excerpt)}</p>`,
-      `<p>${sanitizeHtml(content)}</p>`,
+      `<p>${sanitizeHtml(contentText)}</p>`,
       `<p>Källa: <a href="${sanitizeHtml(item.link)}" rel="noopener" target="_blank">${sanitizeHtml(item.link)}</a></p>`
     ].join('');
 

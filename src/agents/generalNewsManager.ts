@@ -2,33 +2,74 @@ import { fetchRSSFeeds, processAndUpsertNews } from './generalNewsAgent.js';
 import { postToLinkedIn } from '../services/linkedin.js';
 import { withFirestore } from '../services/firestore.js';
 import { COLLECTIONS } from '../services/schema.js';
+import { readFileSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+interface RSSFeedConfig {
+  name: string;
+  url: string;
+  category: string;
+}
+
+interface RSSFeedsConfig {
+  feeds: RSSFeedConfig[];
+}
+
+/**
+ * Läser RSS-feeds från JSON-filen
+ */
+function loadRSSFeeds(): RSSFeedConfig[] {
+  try {
+    // Försök läsa från projektets root (runt dist/ vid deployment)
+    const feedsPath = join(process.cwd(), 'rss-feeds.json');
+    const content = readFileSync(feedsPath, 'utf-8');
+    const config: RSSFeedsConfig = JSON.parse(content);
+    return config.feeds;
+  } catch (error) {
+    console.warn('Failed to load rss-feeds.json, falling back to env variable:', error);
+    
+    // Fallback till miljövariabel om JSON-filen saknas
+    const feedUrlsStr = process.env.RSS_FEEDS;
+    if (feedUrlsStr) {
+      return feedUrlsStr.split(',').map((url, index) => ({
+        name: `RSS Feed ${index + 1}`,
+        url: url.trim(),
+        category: 'General AI News'
+      })).filter(feed => feed.url);
+    }
+    
+    return [];
+  }
+}
 
 /**
  * Huvudfunktion som kör hela flödet för allmänna AI-nyheter
  */
 export async function runGeneralNewsManager({ force = false }: { force?: boolean } = {}) {
-  const feedUrlsStr = process.env.RSS_FEEDS;
-  if (!feedUrlsStr) {
-    console.warn('RSS_FEEDS environment variable not set');
-    return { processed: 0, error: 'RSS_FEEDS not configured' };
-  }
-
-  const feedUrls = feedUrlsStr.split(',').map(url => url.trim()).filter(Boolean);
-  if (feedUrls.length === 0) {
+  const feeds = loadRSSFeeds();
+  
+  if (feeds.length === 0) {
+    console.warn('No RSS feeds configured');
     return { processed: 0, error: 'No RSS feeds configured' };
   }
+
+  console.log(`📡 Loaded ${feeds.length} RSS feeds from configuration`);
 
   // Bearbeta max 5 nyheter per körning
   let processed = 0;
   const processedNews: Array<{ id: string; slug: string; title: string; sourceUrl: string }> = [];
 
   // Processera varje feed individuellt för att få rätt källa
-  for (let i = 0; i < feedUrls.length && processedNews.length < 5; i++) {
-    const feedUrl = feedUrls[i];
-    const source = `RSS Feed ${i + 1}`;
+  for (let i = 0; i < feeds.length && processedNews.length < 5; i++) {
+    const feed = feeds[i];
+    const source = feed.name; // Använd feed-namnet som källa
     
     // Hämta items från denna specifika feed
-    const feedItems = await fetchRSSFeeds([feedUrl]);
+    const feedItems = await fetchRSSFeeds([feed.url]);
     const itemsToProcessFromFeed = feedItems.slice(0, 1); // Ta första från varje feed
 
     if (itemsToProcessFromFeed.length === 0) continue;

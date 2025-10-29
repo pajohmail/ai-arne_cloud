@@ -1,0 +1,14 @@
+# Cloud Build configuration för TypeScript
+steps:
+  - name: 'node:22'
+    entrypoint: 'npm'
+    args: ['install']
+  - name: 'node:22'
+    entrypoint: 'npm'
+    args: ['run', 'build']
+  - name: 'node:22'
+    entrypoint: 'cp'
+    args: ['-r', 'dist', 'node_modules', 'package.json', '/workspace/output']
+options:
+  logging: CLOUD_LOGGING_ONLY
+

@@ -1,0 +1,75 @@
+{
+  "feeds": [
+    {
+      "name": "OpenAI Blog",
+      "url": "https://openai.com/blog/rss.xml",
+      "category": "AI APIs, LLMs, agent frameworks"
+    },
+    {
+      "name": "Anthropic News",
+      "url": "https://www.anthropic.com/news/rss.xml",
+      "category": "Claude, agentic systems, API updates"
+    },
+    {
+      "name": "Google DeepMind Blog",
+      "url": "https://deepmind.google/discover/rss/",
+      "category": "LLM research, reasoning models"
+    },
+    {
+      "name": "Microsoft Azure AI Blog",
+      "url": "https://techcommunity.microsoft.com/t5/azure-ai-blog/bg-p/AzureAI-Blog/rss",
+      "category": "AI APIs, agents, developer tools"
+    },
+    {
+      "name": "Hugging Face Blog",
+      "url": "https://huggingface.co/blog/feed.xml",
+      "category": "Open models, tools, Transformers, LLM training"
+    },
+    {
+      "name": "LangChain Blog",
+      "url": "https://blog.langchain.dev/rss/",
+      "category": "Agent frameworks, tool integration"
+    },
+    {
+      "name": "Mistral AI News",
+      "url": "https://mistral.ai/news/feed.xml",
+      "category": "New open models, LLM architecture"
+    },
+    {
+      "name": "Cohere Blog",
+      "url": "https://cohere.com/blog/rss.xml",
+      "category": "Embeddings, LLM APIs"
+    },
+    {
+      "name": "Vercel AI SDK Updates",
+      "url": "https://vercel.com/changelog/feed",
+      "category": "Frontend + AI integrations, Responses API usage"
+    },
+    {
+      "name": "OpenRouter News",
+      "url": "https://openrouter.ai/feed.xml",
+      "category": "Multi-model APIs, LLM access layer"
+    },
+    {
+      "name": "AI Infrastructure Weekly",
+      "url": "https://aiinfraweekly.com/feed/",
+      "category": "Tools, orchestration, new agent infra"
+    },
+    {
+      "name": "AWS Machine Learning Blog",
+      "url": "https://aws.amazon.com/blogs/machine-learning/feed/",
+      "category": "LLM hosting, agent tools, API services"
+    },
+    {
+      "name": "Arxiv: Computation and Language (cs.CL)",
+      "url": "https://export.arxiv.org/rss/cs.CL",
+      "category": "New LLM research papers"
+    },
+    {
+      "name": "Arxiv: Artificial Intelligence (cs.AI)",
+      "url": "https://export.arxiv.org/rss/cs.AI",
+      "category": "Novel agent architectures and reasoning models"
+    }
+  ]
+}
+

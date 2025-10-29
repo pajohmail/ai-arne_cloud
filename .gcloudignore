@@ -1,0 +1,19 @@
+# This file specifies files that are *not* uploaded to Google Cloud
+.gcloudignore
+.git
+.gitignore
+node_modules
+# Exclude test files
+test-results.txt
+firestore-test-results.txt
+# Exclude env files
+.env
+# Exclude budget files
+budget*.json
+# Exclude compiled test files but keep dist/
+test-local.js
+test-firestore.js
+# Include RSS feeds configuration (needed at runtime)
+# rss-feeds.json is needed - do NOT exclude
+# Inkludera src/ och tsconfig.json för Cloud Build att kompilera
+# Inkludera dist/ för deployment
