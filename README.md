@@ -1,6 +1,6 @@
 # AI-Arne Cloud Agentsystem
 
-Ett agentsystem som körs på Google Cloud Functions och övervakar AI-API:er från stora leverantörer. Använder Firestore som databas och PHP API på one.com för att visa innehåll.
+Ett agentsystem som körs på Google Cloud Functions och övervakar AI-API:er från stora leverantörer. Använder Firestore som databas och producerar innehåll som webbplatsen läser direkt från Firestore.
 
 ## Arkitektur
 
@@ -11,19 +11,15 @@ Cloud Functions (Node.js agenter)
     ↓
 Firestore (NoSQL databas, gratis tier)
     ↓
-PHP API på one.com (läser från Firestore)
-    ↓
-AI-arne.se (visar innehåll)
+Webbplats (läser direkt från Firestore via REST API)
 ```
 
 ## Funktioner
 
-- **Chefagent**: Orkestrerar systemet varannan vecka
-- **Provider-agent**: Övervakar OpenAI, Google Gemini, Meta Llama, Anthropic
-- **Nyhetsagent**: Publicerar bearbetade nyheter till Firestore
-- **Tutorial-agent**: Skapar översiktliga tutorials
+- **API-nyhetsagent**: Övervakar API-nyheter från Anthropic, OpenAI och Google AI
+- **RSS-nyhetsagent**: Hämtar allmänna AI-nyheter från RSS-feeds med fokus på utveckling
+- **Tutorial-agent**: Skapar översiktliga tutorials för API-nyheter
 - **LinkedIn-integration**: Uppdaterar företagsprofil automatiskt
-- **PHP API**: Hämtar innehåll från Firestore för AI-arne.se
 
 ## Installation
 
@@ -47,14 +43,78 @@ GOOGLE_CLOUD_PROJECT=your-project-id
 PUBLIC_BASE_URL=https://ai-arne.se
 LINKEDIN_ACCESS_TOKEN=...
 LINKEDIN_ORG_URN=urn:li:organization:...
+RSS_FEEDS=https://feeds.feedburner.com/oreilly/radar,https://techcrunch.com/feed/
+ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-### PHP API (på one.com)
-```php
-define('FIRESTORE_PROJECT_ID', 'your-project-id');
-define('FIRESTORE_API_KEY', 'your-firestore-api-key');
-define('API_KEY', 'your-secret-api-key');
+## Autentisering
+
+### Google Cloud-tjänster (Application Default Credentials)
+
+**Hur det fungerar:**
+- När du deployar med `gcloud` använder det dina inloggade Google-credentials
+- Cloud Functions använder automatiskt **Application Default Credentials (ADC)**
+- Ingen explicit API-nyckel behövs för Google-tjänster
+
+**Tjänster som använder ADC:**
+- ✅ **Firestore** - Automatisk autentisering via ADC
+- ✅ **Cloud Functions** - Automatisk service account
+- ✅ **Cloud Logging** - Automatisk logging
+- ✅ **Cloud Monitoring** - Automatisk monitoring
+
+**Synergier:**
+- En autentisering (din Google-inloggning) för alla Google-tjänster
+- Inga manuella API-nycklar behövs för Google-tjänster
+- Automatisk hantering via Cloud Functions service account
+
+**Implementation:**
+```typescript
+// Firestore använder automatiskt ADC - ingen explicit konfiguration behövs
+firestore = new Firestore({
+  projectId: process.env.GOOGLE_CLOUD_PROJECT!,
+  // Använder default credentials från Cloud Functions
+});
 ```
+
+### Externa API:er (API-nycklar och tokens)
+
+**AI Providers:**
+- **Anthropic API** - API-nyckel från miljövariabel `ANTHROPIC_API_KEY`
+  - Används för AI-baserad filtrering och sammanfattning av RSS-nyheter
+- **OpenAI** - Används inte direkt (endast publika GitHub API-anrop för releases)
+- **Google AI/Gemini** - Används inte direkt (endast publika GitHub API-anrop för releases)
+
+**LinkedIn API:**
+- **LinkedIn Business Page** - AI-Arne har redan en business-sida som är konfigurerad
+- Business-sidan har tillgång till LinkedIn API via OAuth
+- Access token lagras i miljövariabel `LINKEDIN_ACCESS_TOKEN`
+- Organisation URN lagras i miljövariabel `LINKEDIN_ORG_URN`
+
+**Viktigt:**
+- Dessa API:er använder **INTE** Google Cloud-autentisering
+- Varje provider har sin egen autentiseringsmetod (API-nyckel/OAuth)
+- LinkedIn business-sidan är redan konfigurerad och har tillgång till API
+
+**Implementation:**
+```typescript
+// Anthropic API - API-nyckel från miljövariabel
+const anthropic = new Anthropic({ 
+  apiKey: process.env.ANTHROPIC_API_KEY 
+});
+
+// LinkedIn API - Access token från miljövariabel
+// Business-sidan har redan tillgång till LinkedIn API
+await postToLinkedIn(args, process.env.LINKEDIN_ACCESS_TOKEN!);
+```
+
+### Lokal utveckling (Firestore)
+
+För lokal utveckling behöver du sätta `GOOGLE_APPLICATION_CREDENTIALS`:
+```
+GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/service-account-key.json
+```
+
+Skapa en service account i Google Cloud Console med rollen "Cloud Datastore User" och ladda ner JSON-nyckeln.
 
 ## Firestore Datastruktur
 
@@ -79,7 +139,24 @@ tutorials/
     sourceUrl: string
     createdAt: timestamp
     updatedAt: timestamp
+
+news/
+  {newsId}/
+    slug: string
+    title: string
+    excerpt: string
+    content: string
+    sourceUrl: string
+    source: string
+    linkedinUrn: string
+    createdAt: timestamp
+    updatedAt: timestamp
 ```
+
+### Index
+- `posts.slug` (==) – krävs för frågan `where('slug','==',...)`
+- `tutorials.postId` (==) – krävs för frågan `where('postId','==',...)`
+- `news.slug` (==) – krävs för frågan `where('slug','==',...)`
 
 ## Deployment
 
@@ -89,6 +166,42 @@ npm run build
 ```
 
 ### 2. Deploy till Google Cloud Functions
+
+Deploya båda handlers:
+
+**API-nyhetshandler:**
+```bash
+gcloud functions deploy apiNewsHandler \
+  --gen2 \
+  --runtime=nodejs22 \
+  --region=europe-north1 \
+  --source=/home/paj/Dev/ai-arne_cloud \
+  --entry-point=apiNewsHandler \
+  --trigger-http \
+  --allow-unauthenticated \
+  --set-env-vars=GOOGLE_CLOUD_PROJECT=your-project-id \
+  --set-env-vars=PUBLIC_BASE_URL=https://ai-arne.se \
+  --set-env-vars=LINKEDIN_ACCESS_TOKEN=...,LINKEDIN_ORG_URN=urn:li:organization:...
+```
+
+**Allmänna nyhetshandler:**
+```bash
+gcloud functions deploy generalNewsHandler \
+  --gen2 \
+  --runtime=nodejs22 \
+  --region=europe-north1 \
+  --source=/home/paj/Dev/ai-arne_cloud \
+  --entry-point=generalNewsHandler \
+  --trigger-http \
+  --allow-unauthenticated \
+  --set-env-vars=GOOGLE_CLOUD_PROJECT=your-project-id \
+  --set-env-vars=PUBLIC_BASE_URL=https://ai-arne.se \
+  --set-env-vars=LINKEDIN_ACCESS_TOKEN=...,LINKEDIN_ORG_URN=urn:li:organization:... \
+  --set-env-vars=RSS_FEEDS=https://feeds.feedburner.com/oreilly/radar,https://techcrunch.com/feed/ \
+  --set-env-vars=ANTHROPIC_API_KEY=sk-ant-...
+```
+
+**Bakåtkompatibilitet (valfritt):**
 ```bash
 gcloud functions deploy managerHandler \
   --gen2 \
@@ -104,11 +217,22 @@ gcloud functions deploy managerHandler \
 ```
 
 ### 3. Sätt upp Cloud Scheduler
+
+**För API-nyheter:**
 ```bash
-gcloud scheduler jobs create http ai-arne-biweekly \
+gcloud scheduler jobs create http ai-arne-api-news \
   --schedule="0 9 * * MON" \
   --time-zone="Europe/Stockholm" \
-  --uri="https://REGION-PROJECT.cloudfunctions.net/managerHandler" \
+  --uri="https://REGION-PROJECT.cloudfunctions.net/apiNewsHandler" \
+  --http-method=GET
+```
+
+**För allmänna nyheter:**
+```bash
+gcloud scheduler jobs create http ai-arne-general-news \
+  --schedule="0 9 * * MON" \
+  --time-zone="Europe/Stockholm" \
+  --uri="https://REGION-PROJECT.cloudfunctions.net/generalNewsHandler" \
   --http-method=GET
 ```
 
@@ -116,10 +240,6 @@ gcloud scheduler jobs create http ai-arne-biweekly \
 ```bash
 firebase deploy --only firestore:rules
 ```
-
-### 5. Ladda upp PHP API till one.com
-- Kopiera `api/posts.php` och `api/tutorials.php` till din one.com webbplats
-- Konfigurera miljövariabler i PHP-filerna
 
 ## Testning
 
@@ -133,11 +253,14 @@ npm run test:local
 npm run test:firestore
 ```
 
-## API Endpoints (PHP)
+## Firestore API
 
-- `GET /api/posts.php?latest=10` - Senaste 10 nyheter
-- `GET /api/posts.php?slug={slug}` - Specifik post
-- `GET /api/tutorials.php?post_id={id}` - Tutorial för post
+Webbplatsen kommunicerar direkt med Firestore via REST API:
+- `GET https://firestore.googleapis.com/v1/projects/{project}/databases/(default)/documents/posts`
+- `GET https://firestore.googleapis.com/v1/projects/{project}/databases/(default)/documents/tutorials`
+- `GET https://firestore.googleapis.com/v1/projects/{project}/databases/(default)/documents/news`
+
+Se Firestore REST API dokumentation för detaljer om hur man läser från samlingarna.
 
 ## Kostnad
 
@@ -148,7 +271,8 @@ npm run test:firestore
 
 ## Säkerhet
 
-- Firestore säkerhetsregler: Endast Cloud Functions kan skriva
-- PHP läser via REST API med API-nyckel
-- API-nyckel lagras server-side i PHP (ej i JS)
-- HTTPS för all kommunikation
+- **Firestore säkerhetsregler**: Endast Cloud Functions kan skriva (via service account)
+- **Firestore REST API**: Alla kan läsa (publika samlingar)
+- **Google Cloud-autentisering**: Automatisk via Application Default Credentials (ADC)
+- **Externa API-nycklar**: Lagras säkert i miljövariabler i Google Cloud Functions
+- **HTTPS**: Används för all kommunikation

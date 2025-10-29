@@ -7,7 +7,6 @@ dist/
 
 # Test results
 test-results.txt
-database-test-results.txt
 firestore-test-results.txt
 
 # Google Cloud credentials

@@ -3,7 +3,7 @@ import { upsertNews } from './newsAgent.js';
 import { createOrUpdateTutorial } from './tutorialAgent.js';
 import { postToLinkedIn } from '../services/linkedin.js';
 
-export async function runManager({ force = false }: { force?: boolean } = {}) {
+export async function runApiNewsManager({ force = false }: { force?: boolean } = {}) {
   const releases = await checkProviders();
   if (!releases.length) return { processed: 0 };
 

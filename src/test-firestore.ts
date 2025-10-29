@@ -3,6 +3,7 @@ import { checkProviders } from './agents/providers.js';
 import { upsertNews } from './agents/newsAgent.js';
 import { createOrUpdateTutorial } from './agents/tutorialAgent.js';
 import { writeFileSync } from 'fs';
+import { withFirestore } from './services/firestore.js';
 
 // Ladda miljövariabler
 config();
@@ -49,9 +50,20 @@ async function runFirestoreTest() {
         const newsResult = await upsertNews(release);
         console.log(`✅ Nyhet sparad med ID: ${newsResult.id}, slug: ${newsResult.slug}`);
         
+        // Läs tillbaka posten för verifiering
+        await withFirestore(async (db) => {
+          const doc = await db.collection('posts').doc(newsResult.id).get();
+          console.log(`🔎 Verifierad post-titel: ${doc.exists ? doc.data()?.title : 'saknas'}`);
+        });
+
         // Skapa tutorial
         const tutorialResult = await createOrUpdateTutorial(newsResult.id, release);
         console.log(`✅ Tutorial skapad med ID: ${tutorialResult.id}`);
+        // Läs tillbaka tutorial för verifiering
+        await withFirestore(async (db) => {
+          const snap = await db.collection('tutorials').where('postId', '==', newsResult.id).limit(1).get();
+          console.log(`🔎 Verifierad tutorial hittad: ${!snap.empty}`);
+        });
         
         report += `✅ ${release.provider.toUpperCase()} - ${release.name}\n`;
         report += `   Nyhet ID: ${newsResult.id}, Slug: ${newsResult.slug}\n`;

@@ -1,6 +1,6 @@
-import { withFirestore } from '../services/firestore.js';
 import { sanitizeHtml } from '../utils/text.js';
 import type { ProviderRelease } from './providers.js';
+import { upsertTutorialForPost } from '../services/upsert.js';
 
 export async function createOrUpdateTutorial(postId: string, release: ProviderRelease) {
   const title = `Kom igång med ${release.name}${release.version ? ' ' + release.version : ''}`;
@@ -19,41 +19,9 @@ export async function createOrUpdateTutorial(postId: string, release: ProviderRe
     ].join('\n')
   );
 
-  return await withFirestore(async (db) => {
-    const tutorialsRef = db.collection('tutorials');
-    
-    // Kolla om tutorial redan finns för denna post
-    const existingQuery = await tutorialsRef.where('postId', '==', postId).limit(1).get();
-    
-    const tutorialData = {
-      postId,
-      title,
-      content: html,
-      sourceUrl: release.url,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
-
-    if (!existingQuery.empty) {
-      // Uppdatera befintlig tutorial
-      const existingDoc = existingQuery.docs[0];
-      await existingDoc.ref.update({
-        title,
-        content: html,
-        sourceUrl: release.url,
-        updatedAt: new Date()
-      });
-      return { 
-        id: existingDoc.id, 
-        updated: true 
-      };
-    } else {
-      // Skapa ny tutorial
-      const docRef = await tutorialsRef.add(tutorialData);
-      return { 
-        id: docRef.id, 
-        updated: false 
-      };
-    }
+  return await upsertTutorialForPost(postId, {
+    title,
+    content: html,
+    url: release.url
   });
 }

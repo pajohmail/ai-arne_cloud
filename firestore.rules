@@ -12,5 +12,11 @@ service cloud.firestore {
       allow read: if true;  // Alla kan läsa tutorials
       allow write: if false; // Endast Cloud Functions kan skriva (via service account)
     }
+    
+    // News collection - endast Cloud Functions kan skriva, alla kan läsa
+    match /news/{newsId} {
+      allow read: if true;  // Alla kan läsa news
+      allow write: if false; // Endast Cloud Functions kan skriva (via service account)
+    }
   }
 }

@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 export type ProviderRelease = {
-  provider: 'openai' | 'google' | 'meta' | 'anthropic' | 'mistral' | 'perplexity' | 'other';
+  provider: 'openai' | 'google' | 'anthropic' | 'mistral' | 'perplexity' | 'other';
   name: string;
   version?: string;
   kind: 'api' | 'model' | 'sdk';
@@ -38,19 +38,6 @@ async function fetchGoogle(): Promise<ProviderRelease[]> {
   }));
 }
 
-async function fetchMeta(): Promise<ProviderRelease[]> {
-  const url = 'https://api.github.com/repos/meta-llama/llama-stack/releases?per_page=5';
-  const { data } = await axios.get(url, { timeout: 15000 });
-  return data.map((r: any) => ({
-    provider: 'meta',
-    name: r.name || 'Llama update',
-    kind: 'sdk',
-    version: r.tag_name,
-    publishedAt: r.published_at,
-    url: r.html_url,
-    summary: r.body?.slice(0, 300) || 'Update'
-  }));
-}
 
 async function fetchAnthropic(): Promise<ProviderRelease[]> {
   const url = 'https://api.github.com/repos/anthropics/anthropic-sdk-typescript/releases?per_page=5';
@@ -67,7 +54,7 @@ async function fetchAnthropic(): Promise<ProviderRelease[]> {
 }
 
 export async function checkProviders(): Promise<ProviderRelease[]> {
-  const results = await Promise.allSettled([fetchOpenAI(), fetchGoogle(), fetchMeta(), fetchAnthropic()]);
+  const results = await Promise.allSettled([fetchOpenAI(), fetchGoogle(), fetchAnthropic()]);
   return results
     .filter(r => r.status === 'fulfilled')
     .flatMap((r: PromiseFulfilledResult<ProviderRelease[]>) => r.value)
