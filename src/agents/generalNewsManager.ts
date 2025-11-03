@@ -54,32 +54,42 @@ export async function runGeneralNewsManager({ force = false }: { force?: boolean
     }
   }
 
-  // Publicera på LinkedIn
-  const baseUrl = process.env.PUBLIC_BASE_URL || 'https://ai-arne.se';
+  // Publicera på LinkedIn (hoppa över om credentials är placeholders)
+  const linkedinToken = process.env.LINKEDIN_ACCESS_TOKEN;
+  const linkedinUrn = process.env.LINKEDIN_ORG_URN;
   
-  for (const news of processedNews.slice(0, 3)) {
-    const newsUrl = `${baseUrl}/news/${news.slug}`;
+  if (linkedinToken && linkedinUrn && 
+      linkedinToken !== 'placeholder' && 
+      linkedinUrn !== 'urn:li:organization:0' &&
+      !linkedinUrn.includes('123456789')) {
+    const baseUrl = process.env.PUBLIC_BASE_URL || 'https://ai-arne.se';
     
-    const text = [
-      `AI-nyhet: ${news.title}`,
-      '',
-      `Läs mer: ${newsUrl}`
-    ].join('\n');
+    for (const news of processedNews.slice(0, 3)) {
+      const newsUrl = `${baseUrl}/news/${news.slug}`;
+      
+      const text = [
+        `AI-nyhet: ${news.title}`,
+        '',
+        `Läs mer: ${newsUrl}`
+      ].join('\n');
 
-    try {
-      await postToLinkedIn(
-        {
-          organizationUrn: process.env.LINKEDIN_ORG_URN!,
-          text,
-          title: news.title,
-          link: newsUrl
-        },
-        process.env.LINKEDIN_ACCESS_TOKEN!
-      );
-    } catch (error) {
-      console.error(`Failed to post to LinkedIn:`, error);
-      // Fortsätt med nästa nyhet även om LinkedIn-posten misslyckas
+      try {
+        await postToLinkedIn(
+          {
+            organizationUrn: linkedinUrn,
+            text,
+            title: news.title,
+            link: newsUrl
+          },
+          linkedinToken
+        );
+      } catch (error) {
+        console.error(`Failed to post to LinkedIn:`, error);
+        // Fortsätt med nästa nyhet även om LinkedIn-posten misslyckas
+      }
     }
+  } else {
+    console.log(`Skipping LinkedIn posts (credentials not configured)`);
   }
 
   return { processed };
