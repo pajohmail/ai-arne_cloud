@@ -148,22 +148,28 @@ $bodyTut = json_encode([
     'limit' => 1
   ]
 ]);
+
+$tutorialUrl = '';
 $ch = curl_init($urlTut);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
 curl_setopt($ch, CURLOPT_POST, true);
 curl_setopt($ch, CURLOPT_POSTFIELDS, $bodyTut);
+curl_setopt($ch, CURLOPT_TIMEOUT, 30);
 $respTut = curl_exec($ch);
 $httpTut = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$curlError = curl_error($ch);
 curl_close($ch);
 
-$tutorialUrl = '';
-if ($httpTut === 200) {
+if ($httpTut === 200 && $respTut) {
   $dt = json_decode($respTut, true);
-  if (isset($dt[0]['document'])) {
+  if ($dt && isset($dt[0]['document'])) {
     $t = $dt[0]['document']['fields'];
     $tutorialUrl = '/tutorial.php?id=' . basename($dt[0]['document']['name']);
   }
+} else {
+  // Debug: logga fel (ta bort i produktion eller flytta till error log)
+  error_log("Tutorial query failed: HTTP $httpTut, Error: $curlError, Response: " . substr($respTut, 0, 200));
 }
 ?>
 
