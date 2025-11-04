@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getLinkedInAccessToken } from './linkedinAuth.js';
 
 type LinkedInPostArgs = {
   organizationUrn: string;
@@ -7,8 +8,9 @@ type LinkedInPostArgs = {
   link?: string;
 };
 
-export async function postToLinkedIn(args: LinkedInPostArgs, accessToken = process.env.LINKEDIN_ACCESS_TOKEN!) {
+export async function postToLinkedIn(args: LinkedInPostArgs, accessToken?: string) {
   const { organizationUrn, text, title, link } = args;
+  const token = accessToken || (await getLinkedInAccessToken()) || process.env.LINKEDIN_ACCESS_TOKEN!;
 
   const payload = {
     author: organizationUrn,
@@ -33,7 +35,7 @@ export async function postToLinkedIn(args: LinkedInPostArgs, accessToken = proce
 
   const { data } = await axios.post('https://api.linkedin.com/v2/ugcPosts', payload, {
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: `Bearer ${token}`,
       'X-Restli-Protocol-Version': '2.0.0',
       'Content-Type': 'application/json'
     },

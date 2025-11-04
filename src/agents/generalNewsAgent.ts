@@ -1,3 +1,4 @@
+import axios from 'axios';
 import Parser from 'rss-parser';
 import OpenAI from 'openai';
 import { sanitizeHtml } from '../utils/text.js';
@@ -97,6 +98,69 @@ export function filterForDevelopmentFocus(item: RSSFeedItem): boolean {
 }
 
 /**
+ * Söka efter relaterade artiklar och diskussioner om nyheten
+ */
+async function searchRelatedArticles(item: RSSFeedItem): Promise<string> {
+  try {
+    // Extrahera nyckelord från nyheten
+    const keywords = item.title.split(' ').slice(0, 3).join(' ');
+    
+    // Sök i GitHub discussions/issues (om det är en teknisk nyhet)
+    // För RSS-nyheter kan vi söka efter relaterade artiklar via GitHub API
+    const searchQuery = encodeURIComponent(keywords);
+    const url = `https://api.github.com/search/repositories?q=${searchQuery}&sort=updated&per_page=3`;
+    
+    try {
+      const { data } = await axios.get(url, { 
+        timeout: 10000,
+        headers: {
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      });
+
+      if (data.items && data.items.length > 0) {
+        const related = data.items
+          .slice(0, 2)
+          .map((repo: any) => `- ${repo.full_name}: ${repo.description || ''}`)
+          .join('\n');
+        return related;
+      }
+    } catch (error) {
+      // Ignorera om sökningen misslyckas
+    }
+
+    return '';
+  } catch (error) {
+    console.error(`Failed to search related articles:`, error);
+    return '';
+  }
+}
+
+/**
+ * Hämta mer kontext och semantik om nyheten
+ */
+async function fetchSemanticContext(item: RSSFeedItem): Promise<string> {
+  try {
+    // Försök hämta mer information från artikeln direkt (om det är en URL)
+    if (item.link) {
+      try {
+        // För RSS-nyheter kan vi inte alltid hämta hela artikeln direkt
+        // Men vi kan använda informationen vi redan har
+        const fullContent = (item.content || item.contentSnippet || '').slice(0, 2000);
+        return fullContent;
+      } catch (error) {
+        // Ignorera om hämtning misslyckas
+      }
+    }
+
+    return '';
+  } catch (error) {
+    console.error(`Failed to fetch semantic context:`, error);
+    return '';
+  }
+}
+
+/**
  * Använder OpenAI Responses API med structured outputs för att sammanfatta och verifiera utvecklingsfokus
  */
 export async function summarizeWithAI(item: RSSFeedItem, source: string): Promise<ProcessedNewsItem | null> {
@@ -109,6 +173,13 @@ export async function summarizeWithAI(item: RSSFeedItem, source: string): Promis
 
   const content = item.contentSnippet || item.content || '';
   
+  // Hämta kontext från webben
+  console.log(`📡 Fetching context for news: ${item.title}...`);
+  const [relatedArticles, semanticContext] = await Promise.all([
+    searchRelatedArticles(item),
+    fetchSemanticContext(item)
+  ]);
+
   // JSON schema för structured output
   const responseSchema = {
     type: 'object',
@@ -119,48 +190,61 @@ export async function summarizeWithAI(item: RSSFeedItem, source: string): Promis
       },
       title: {
         type: 'string',
-        description: 'Artikelns titel på svenska'
+        description: 'Ironisk, engagerande artikelns titel på svenska'
       },
       excerpt: {
         type: 'string',
-        description: 'Kort sammanfattning på svenska (2-3 meningar, max 200 ord)'
+        description: 'Kort sammanfattning på svenska med ironi (2-3 meningar, max 200 ord)'
       },
       content: {
         type: 'string',
-        description: 'Huvudinnehåll på svenska (3-5 meningar, max 300 ord)'
+        description: 'Utförligt huvudinnehåll på svenska med semantisk rikedom, ironi och humor (5-8 meningar)'
       }
     },
     required: ['skip', 'title', 'excerpt', 'content'],
     additionalProperties: false
   };
 
-  const prompt = `Du är en AI-nyhetsredigerare som fokuserar på AI-utveckling och programmering. 
-Kontrollera följande nyhet och skapa en kort sammanfattning på svenska som fokuserar på utvecklingsaspekter.
+  const relatedArticlesText = relatedArticles
+    ? `\n\nRelaterade artiklar/diskussioner:\n${relatedArticles}`
+    : '';
+
+  const semanticContextText = semanticContext && semanticContext.length > content.length
+    ? `\n\nYtterligare kontext:\n${semanticContext}`
+    : '';
+
+  const prompt = `Du är en teknisk nyhetsredigerare med en förkärlek för ironi och underhållande skrivande. 
+
+Kontrollera följande nyhet och skapa en engagerande, ironisk artikel på svenska som fokuserar på utvecklingsaspekter.
 
 Om nyheten handlar om bildgenerering, videogenerering, eller visuella AI-tjänster som inte är relevanta för utveckling, sätt "skip" till true.
 
 Nyhetstitel: ${item.title}
-Innehåll: ${content.substring(0, 2000)}
+Innehåll: ${content.substring(0, 2000)}${relatedArticlesText}${semanticContextText}
 
-Skapa en kort artikel på svenska med:
-- Titel (behåll originaltiteln om den är relevant)
-- En kort sammanfattning (2-3 meningar, max 200 ord)
-- Huvudinnehåll (3-5 meningar, max 300 ord)`;
+VIKTIGT: Skriv artikeln på ett VÄLDIGT underhållande sätt med ett tydligt stänk ironi och humor. Var teknisk korrekt men gör det roligt att läsa. Sök efter semantiska kopplingar och förklarar varför nyheten är relevant för utvecklare. Använd ironi på ett smart sätt - inte för att håna, utan för att göra artikeln mer engagerande.
+
+Skapa en artikel på svenska med (ALLT SKA VARA LÅNGT OCH UTFÖRLIGT):
+- En ironisk, engagerande titel (minst 10-15 ord)
+- En kort sammanfattning med ironi (3-4 meningar, 100-150 ord)
+- Utförligt huvudinnehåll med semantisk rikedom och kontext (minst 10-15 meningar, 400-600 ord)
+
+Tänk på: Innehållet ska vara LÅNGT, UNDERHÅLLANDE och FULLT AV IRONI. Var inte blygsam - gör det riktigt roligt att läsa!`;
 
   try {
     const completion = await openai.beta.chat.completions.parse({
-      model: 'gpt-5-mini',
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
-          content: 'Du är en AI-nyhetsredigerare som fokuserar på AI-utveckling och programmering. Svara alltid på svenska med strukturerad JSON.'
+          content: 'Du är en teknisk nyhetsredigerare med en förkärlek för ironi och underhållande skrivande. Skriv alltid på svenska med ett stänk ironi och humor, men behåll teknisk korrekthet. Använd webbförfrågningar för att hitta mer kontext och perspektiv. Svara med strukturerad JSON.'
         },
         {
           role: 'user',
           content: prompt
         }
       ],
-      max_completion_tokens: 1000,
+      max_completion_tokens: 3000,
       response_format: {
         type: 'json_schema',
         json_schema: {

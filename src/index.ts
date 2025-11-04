@@ -1,6 +1,8 @@
 import { runApiNewsManager } from './agents/manager.js';
 import { runGeneralNewsManager } from './agents/generalNewsManager.js';
 import { isBiweeklyTrigger } from './utils/time.js';
+import { authorizeLinkedInHandler, callbackLinkedInHandler } from './handlers/linkedinAuth.js';
+import { verifyFirestoreHandler } from './handlers/verify.js';
 
 export async function apiNewsHandler(req: any, res: any) {
   try {
@@ -33,4 +35,18 @@ export async function generalNewsHandler(req: any, res: any) {
 // Behåll för bakåtkompatibilitet
 export async function managerHandler(req: any, res: any) {
   return apiNewsHandler(req, res);
+}
+
+// OAuth endpoints
+export async function authLinkedIn(req: any, res: any) {
+  return authorizeLinkedInHandler(req, res);
+}
+
+export async function authLinkedInCallback(req: any, res: any) {
+  return callbackLinkedInHandler(req, res);
+}
+
+// Verification endpoint for Firestore
+export async function verifyFirestore(req: any, res: any) {
+  return verifyFirestoreHandler(req, res);
 }

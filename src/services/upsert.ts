@@ -8,6 +8,9 @@ export interface UpsertNewsArgs {
   version?: string;
   summary: string;
   url: string;
+  title?: string;
+  excerpt?: string;
+  content?: string;
 }
 
 export interface UpsertGeneralNewsArgs {
@@ -20,14 +23,25 @@ export interface UpsertGeneralNewsArgs {
 
 export async function upsertPostFromRelease(release: UpsertNewsArgs) {
   const slug = slugify(`${release.provider}-${release.name}-${release.version || ''}`);
-  const title = `[${release.provider.toUpperCase()}] ${release.name}${release.version ? ' ' + release.version : ''}`;
-  const content = sanitizeHtml(
-    [
-      `<p><strong>${title}</strong></p>`,
-      `<p>${release.summary}</p>`,
-      `<p>Källa: <a href="${release.url}" rel="noopener" target="_blank">${release.url}</a></p>`
-    ].join('')
-  );
+  
+  // Använd custom title/content om de finns, annars generera standard
+  const title = release.title || `[${release.provider.toUpperCase()}] ${release.name}${release.version ? ' ' + release.version : ''}`;
+  const excerpt = release.excerpt || release.summary.slice(0, 280);
+  
+  let content: string;
+  if (release.content) {
+    // Använd AI-genererat innehåll och lägg till källa
+    content = release.content + `<p>Källa: <a href="${sanitizeHtml(release.url)}" rel="noopener" target="_blank">${sanitizeHtml(release.url)}</a></p>`;
+  } else {
+    // Standard innehåll
+    content = sanitizeHtml(
+      [
+        `<p><strong>${title}</strong></p>`,
+        `<p>${release.summary}</p>`,
+        `<p>Källa: <a href="${release.url}" rel="noopener" target="_blank">${release.url}</a></p>`
+      ].join('')
+    );
+  }
 
   return await withFirestore(async (db) => {
     const postsRef = db.collection(COLLECTIONS.posts);
@@ -36,7 +50,7 @@ export async function upsertPostFromRelease(release: UpsertNewsArgs) {
     const postData = {
       slug,
       title,
-      excerpt: release.summary.slice(0, 280),
+      excerpt,
       content,
       provider: release.provider,
       sourceUrl: release.url,
@@ -49,6 +63,7 @@ export async function upsertPostFromRelease(release: UpsertNewsArgs) {
       const existingDoc = existingQuery.docs[0];
       await withRetry(() => existingDoc.ref.update({
         title,
+        excerpt,
         content,
         provider: release.provider,
         sourceUrl: release.url,

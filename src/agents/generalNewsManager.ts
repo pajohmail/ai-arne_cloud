@@ -107,6 +107,10 @@ export async function runGeneralNewsManager({ force = false }: { force?: boolean
       `Läs mer: ${newsUrl}`
     ].join('\n');
 
+    if (process.env.DISABLE_LINKEDIN === '1') {
+      console.log('ℹ️ LinkedIn disabled by DISABLE_LINKEDIN=1, skipping post');
+      continue;
+    }
     try {
       await postToLinkedIn(
         {

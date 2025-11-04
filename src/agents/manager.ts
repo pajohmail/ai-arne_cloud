@@ -23,15 +23,19 @@ export async function runApiNewsManager({ force = false }: { force?: boolean } =
       `Läs mer: ${postUrl}`
     ].join('\n');
 
-    await postToLinkedIn(
-      {
-        organizationUrn: process.env.LINKEDIN_ORG_URN!,
-        text,
-        title: `Nyhet: ${rel.name}`,
-        link: postUrl
-      },
-      process.env.LINKEDIN_ACCESS_TOKEN!
-    );
+    if (process.env.DISABLE_LINKEDIN === '1') {
+      console.log('ℹ️ LinkedIn disabled by DISABLE_LINKEDIN=1, skipping post');
+    } else {
+      await postToLinkedIn(
+        {
+          organizationUrn: process.env.LINKEDIN_ORG_URN!,
+          text,
+          title: `Nyhet: ${rel.name}`,
+          link: postUrl
+        },
+        process.env.LINKEDIN_ACCESS_TOKEN!
+      );
+    }
 
     processed++;
   }
