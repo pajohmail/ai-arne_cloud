@@ -1,0 +1,18 @@
+AI-Arne Cloud Database Test Resultat
+=====================================
+Test kördes: 2025-10-27 15:20:24
+Antal funna uppdateringar: 20
+Antal testade: 3
+
+❌ OPENAI - v6.7.0
+   Fel: Error: getaddrinfo ENOTFOUND mysql.one.com
+
+❌ META - v0.3.0
+   Fel: Error: getaddrinfo ENOTFOUND mysql.one.com
+
+❌ OPENAI - v6.6.0
+   Fel: Error: getaddrinfo ENOTFOUND mysql.one.com
+
+Sammanfattning:
+- Lyckade: 0
+- Fel: 3
