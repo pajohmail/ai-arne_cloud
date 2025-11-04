@@ -91,11 +91,28 @@ export function filterForDevelopmentFocus(item: RSSFeedItem): boolean {
 
 /**
  * Använder LLM för att sammanfatta och verifiera utvecklingsfokus
+ * Fallback till enkel sammanfattning om API-nyckel saknas
  */
 export async function summarizeWithAI(item: RSSFeedItem, source: string): Promise<ProcessedNewsItem | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
+  
+  // Om ingen API-nyckel finns, använd enkel sammanfattning
   if (!apiKey) {
-    throw new Error('ANTHROPIC_API_KEY environment variable is required');
+    console.log('ANTHROPIC_API_KEY not set, using simple summarization');
+    const fallbackContent = item.contentSnippet || item.content || '';
+    const fallbackHtml = [
+      `<p><strong>${sanitizeHtml(item.title)}</strong></p>`,
+      `<p>${sanitizeHtml(fallbackContent)}</p>`,
+      `<p>Källa: <a href="${sanitizeHtml(item.link)}" rel="noopener" target="_blank">${sanitizeHtml(item.link)}</a></p>`
+    ].join('');
+    
+    return {
+      title: sanitizeHtml(item.title),
+      content: fallbackHtml,
+      excerpt: sanitizeHtml(fallbackContent.slice(0, 280)),
+      sourceUrl: item.link,
+      source
+    };
   }
 
   const anthropic = new Anthropic({ apiKey });
